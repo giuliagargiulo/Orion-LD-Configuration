@@ -1,0 +1,109 @@
+
+services:
+  mongo:
+    image: mongo:4.4
+    platform: linux/amd64  
+    container_name: mongo_db
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    expose:
+      - "27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fiware
+
+  # orion:
+  #   image: fiware/orion-ld
+  #   platform: linux/amd64 
+  #   depends_on:
+  #     - mongo
+  #   restart: unless-stopped
+  #   ports:
+  #     - "1026:1026"
+  #   command: -dbURI mongodb://mongo:27017 -logLevel INFO
+  #   networks:
+  #     - fiware
+
+  orion:
+    image: fiware/orion-ld
+    platform: linux/amd64 
+    hostname: orion-ld
+    container_name: fiware-orion
+    depends_on:
+      - mongo
+    expose:
+       - "1026"
+    ports:
+      - "1026:1026" 
+    restart: unless-stopped
+    command: -dbURI mongodb://mongo:27017 
+              -mongocOnly
+              -logLevel INFO
+    healthcheck:
+      test: curl --fail -s http://orion:1026/version || exit 1
+    networks:
+      - fiware
+
+  # cygnus:
+  #   container_name: orion-cygnus-1
+  #   image: fiware/cygnus-ngsi
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     - CYGNUS_POSTGRESQL_HOST=postgres
+  #     - CYGNUS_POSTGRESQL_PORT=5432
+  #     - CYGNUS_POSTGRESQL_USER=cygnus
+  #     - CYGNUS_POSTGRESQL_PASS=cygnus
+  #     - CYGNUS_POSTGRESQL_DB=postgres
+  #     - CYGNUS_POSTGRESQL_ENABLE_CACHE=true 
+  #     - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+  #   command: >
+  #     -f ./cygnus/conf/agent.conf
+  #     -n cygnusagent
+  #   volumes:
+  #   - ./cygnus/conf/agent.conf:/opt/apache-flume/conf/agent.conf:ro
+  #   ports:
+  #     - "5050:5050"
+  #     - "5090:5090"
+  #   networks:
+  #     - fiware
+
+  # postgres:
+  #   image: postgres:18
+  #   environment:
+  #     - POSTGRES_PASSWORD=cygnus
+  #     - POSTGRES_USER=cygnus
+  #     - POSTGRES_DB=cygnus
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - fiware
+
+  accumulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: accumulator
+    depends_on:
+      - orion
+    ports:
+      - "1028:1028"
+    networks:
+      - fiware
+      
+networks:
+  fiware:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  mongo-config:
+  #postgres-data:
